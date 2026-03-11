@@ -14,8 +14,6 @@ services:
     expose:
       - "8000"
     volumes:
-      - ./model_group_a_no_cnn:/app/model_group_a_no_cnn:ro
-      - ./bert-base-chinese:/app/bert-base-chinese:ro
       - ./backend:/app/backend
 
   frontend:
