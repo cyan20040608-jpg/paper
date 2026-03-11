@@ -1,104 +1,117 @@
 # NLP 情感分析系统
 
-本项目已整理为前后端分离架构：
+当前推荐的运行方式是不使用 Docker 和 Nginx，而是在本地直接运行 FastAPI，并让 FastAPI 同时提供前端静态页面和 `/api` 接口，再通过 FRP 暴露这一个统一入口。
+
+## 项目结构
 
 - `backend/`：FastAPI 后端，负责模型加载、健康检查和情感分析接口
-- `frontend/`：Vue3 + Element Plus 前端，通过 Nginx 提供静态页面并反向代理 `/api`
+- `frontend/`：Vue 3 前端，构建后生成静态资源
 - `bert-base-chinese/`：本地 BERT 基座目录
 - `model_group_a_no_cnn/`：本地训练权重目录
 
-## Docker 文件
+## 推荐运行方式
 
-已提供以下部署文件：
+### 1. 启动本地后端
+
+在项目根目录执行：
+
+```bash
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+后端启动后：
+
+- `/api/health` 和 `/api/sentiment/analyze` 继续由 FastAPI 处理
+- `/` 和前端路由会由 FastAPI 直接返回 `frontend/dist` 中的静态资源
+
+### 2. 构建前端静态资源
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+构建完成后会生成：
+
+```text
+frontend/dist
+```
+
+如果没有先构建，访问前端页面时会返回明确错误，提示先执行 `npm run build`。
+
+### 3. 本地访问
+
+后端启动且前端构建完成后，直接访问：
+
+```text
+http://127.0.0.1:8000/
+```
+
+也可以验证：
+
+```text
+http://127.0.0.1:8000/sentiment
+http://127.0.0.1:8000/api/health
+```
+
+### 4. 使用 FRP 暴露统一入口
+
+推荐直接暴露本地 FastAPI 的 `8000` 端口，不再暴露 Vite 开发服务器，也不再单独加本地 Nginx。
+
+`frpc.toml` 示例：
+
+```toml
+serverAddr = "8.152.168.40"
+serverPort = 7000
+
+[[proxies]]
+name = "web"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8000
+remotePort = 6000
+```
+
+这样公网访问地址就是：
+
+```text
+http://8.152.168.40:6000/
+```
+
+访问链路：
+
+```text
+浏览器 -> 8.152.168.40:6000 -> frps/frpc -> 本地 FastAPI:8000 -> 前端静态页面 / API
+```
+
+## 前端开发说明
+
+开发调试仍然可以使用：
+
+```bash
+cd frontend
+npm run dev
+```
+
+开发服务器配置在：
+
+[`frontend/vite.config.js`](/D:/pycharm/code/paper/frontend/vite.config.js)
+
+开发时：
+
+- 监听地址：`0.0.0.0`
+- 端口：`5173`
+- `/api` 会代理到 `http://127.0.0.1:8000`
+
+但 `npm run dev` 只用于本地开发，不建议直接通过 FRP 对公网暴露。
+
+## Docker 说明
+
+仓库中仍保留 Docker 相关文件：
 
 - `docker-compose.yml`
 - `backend/Dockerfile`
 - `frontend/Dockerfile`
-- `frontend/nginx.conf`
-- `.env.example`
-- `.dockerignore`
 
-## 本地 Docker 启动
-
-先复制环境变量文件：
-
-```powershell
-Copy-Item .env.example .env
-```
-
-构建并启动：
-
-```powershell
-docker compose up -d --build
-```
-
-查看容器状态：
-
-```powershell
-docker compose ps
-```
-
-查看后端日志：
-
-```powershell
-docker compose logs -f backend
-```
-
-查看前端日志：
-
-```powershell
-docker compose logs -f frontend
-```
-
-停止服务：
-
-```powershell
-docker compose down
-```
-
-## 访问地址
-
-- 前端首页：`http://服务器IP/`
-- 后端健康检查：`http://服务器IP:8000/api/health`
-- 后端分析接口：`POST http://服务器IP:8000/api/sentiment/analyze`
-
-## 服务器部署步骤
-
-将项目上传到服务器后，在项目根目录执行：
-
-```bash
-cp .env.example .env
-docker compose up -d --build
-docker compose ps
-```
-
-如果需要更新代码后重新部署：
-
-```bash
-docker compose down
-docker compose up -d --build
-```
-
-## 环境变量
-
-`.env` 可配置以下参数：
-
-```env
-BACKEND_PORT=8000
-FRONTEND_PORT=80
-APP_DEFAULT_THRESHOLD=0.6
-APP_ALLOW_ORIGINS=http://localhost,http://127.0.0.1
-```
-
-说明：
-
-- `BACKEND_PORT`：宿主机映射的后端端口
-- `FRONTEND_PORT`：宿主机映射的前端端口
-- `APP_DEFAULT_THRESHOLD`：默认分类阈值
-- `APP_ALLOW_ORIGINS`：后端允许的 CORS 来源，多个地址用逗号分隔
-
-## 部署说明
-
-- 前端容器内部使用 Nginx，自动将 `/api` 反向代理到 `backend:8000`
-- 后端容器不直接打包模型，而是通过 `volumes` 挂载根目录下的 `bert-base-chinese/` 和 `model_group_a_no_cnn/`
-- 因此服务器上的项目目录必须保留这两个模型目录
+但对于当前模型体量和低内存机器，更推荐优先使用本地运行方案。

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 
@@ -22,13 +23,15 @@ from backend.app.schemas.sentiment import (
 )
 
 
+logger = logging.getLogger(__name__)
+
 POS_WORDS = {
     "好",
-    "赞",
+    "棒",
     "优秀",
     "喜欢",
     "爱",
-    "棒",
+    "赞",
     "满意",
     "推荐",
     "惊喜",
@@ -45,7 +48,7 @@ NEG_WORDS = {
     "避雷",
     "无语",
     "糟糕",
-    "拖沓",
+    "拉胯",
     "后悔",
     "垃圾",
     "不行",
@@ -63,7 +66,7 @@ transformers.modeling_utils.check_torch_load_is_safe = force_bypass_security_che
 
 
 class BertLoRALinear(nn.Module):
-    """LoRA 加线性分类头。"""
+    """LoRA 线性分类头。"""
 
     def __init__(self, config_dict: dict, model_name: str) -> None:
         super().__init__()
@@ -138,6 +141,12 @@ class SentimentService:
         if not clean_text:
             raise ValueError("输入文本不能为空")
 
+        logger.info(
+            "sentiment analyze started: threshold=%s text_length=%s",
+            threshold,
+            len(clean_text),
+        )
+
         start_time = time.perf_counter()
         inputs = self.tokenizer.encode_plus(
             clean_text,
@@ -147,6 +156,7 @@ class SentimentService:
             truncation=True,
             return_tensors="pt",
         )
+        logger.info("sentiment tokenizer complete")
 
         with torch.no_grad():
             logits = self.model(
@@ -154,10 +164,17 @@ class SentimentService:
                 inputs["attention_mask"].to(self.device),
             )
             probabilities = F.softmax(logits, dim=1)
+        logger.info("sentiment model forward complete")
 
         negative_score = float(probabilities[0][0])
         positive_score = float(probabilities[0][1])
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        logger.info(
+            "sentiment probabilities complete: negative=%s positive=%s duration_ms=%s",
+            negative_score,
+            positive_score,
+            duration_ms,
+        )
 
         if positive_score >= threshold:
             sentiment = "positive"

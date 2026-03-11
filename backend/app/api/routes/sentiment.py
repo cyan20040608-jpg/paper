@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException, status
 
 from backend.app.schemas.sentiment import SentimentAnalyzeRequest, SentimentAnalyzeResponse
@@ -7,6 +9,7 @@ from backend.app.services.sentiment_service import get_sentiment_service
 
 
 router = APIRouter(prefix="/api/sentiment", tags=["sentiment"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/analyze", response_model=SentimentAnalyzeResponse)
@@ -16,7 +19,7 @@ def analyze_sentiment(payload: SentimentAnalyzeRequest) -> SentimentAnalyzeRespo
     if service.status != "ready":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=service.error_message or "模型尚未就绪",
+            detail=service.error_message or "妯″瀷灏氭湭灏辩华",
         )
 
     try:
@@ -26,4 +29,12 @@ def analyze_sentiment(payload: SentimentAnalyzeRequest) -> SentimentAnalyzeRespo
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="推理失败") from exc
+        logger.exception(
+            "sentiment analyze failed: threshold=%s text_length=%s",
+            payload.threshold,
+            len(payload.text),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="鎺ㄧ悊澶辫触",
+        ) from exc

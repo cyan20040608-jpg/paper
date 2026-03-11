@@ -19,6 +19,8 @@ RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
 RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r /app/backend/requirements.txt
 
 COPY backend /app/backend
+COPY bert-base-chinese /app/bert-base-chinese
+COPY model_group_a_no_cnn /app/model_group_a_no_cnn
 
 EXPOSE 8000
 

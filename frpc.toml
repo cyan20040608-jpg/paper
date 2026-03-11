@@ -1,0 +1,9 @@
+serverAddr = "8.152.168.40"
+serverPort = 7000
+
+[[proxies]]
+name = "web"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8000
+remotePort = 18000
