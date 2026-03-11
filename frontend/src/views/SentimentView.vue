@@ -46,7 +46,6 @@
           <span>输出包含标签、概率、高亮与原始数据</span>
         </div>
       </section>
-
     </section>
 
     <div class="sentiment-results">
@@ -77,6 +76,7 @@ const loading = ref(false);
 const result = ref(null);
 const errorMessage = ref("");
 const healthStatus = ref("idle");
+const healthDetail = ref("");
 
 const healthTag = computed(() => {
   if (healthStatus.value === "ready") {
@@ -95,8 +95,16 @@ const healthText = computed(() => {
     return "模型已就绪";
   }
 
+  if (healthStatus.value === "loading") {
+    return "模型加载中";
+  }
+
   if (healthStatus.value === "error") {
-    return "模型异常";
+    return healthDetail.value || "模型异常";
+  }
+
+  if (healthStatus.value === "unreachable") {
+    return "连接后端失败";
   }
 
   return "正在检测";
@@ -105,9 +113,13 @@ const healthText = computed(() => {
 async function loadHealth() {
   try {
     const response = await fetchHealth();
-    healthStatus.value = response.data.status || "idle";
+    const backendStatus = response.data.status || "idle";
+
+    healthStatus.value = backendStatus;
+    healthDetail.value = response.data.detail || "";
   } catch (error) {
-    healthStatus.value = "error";
+    healthStatus.value = "unreachable";
+    healthDetail.value = error?.message || "";
   }
 }
 
@@ -120,7 +132,11 @@ async function handleAnalyze() {
       text: form.text,
       threshold: Number(form.threshold)
     });
+
     result.value = response.data;
+    healthStatus.value = "ready";
+    healthDetail.value = "";
+
     appendHistoryRecord({
       id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       comment: form.text.trim(),
@@ -132,7 +148,11 @@ async function handleAnalyze() {
   } catch (error) {
     result.value = null;
     errorMessage.value =
-      error?.response?.data?.detail || "分析请求失败，请检查后端服务是否已启动。";
+      error?.response?.data?.detail || "分析请求失败，请检查后端服务是否已经启动。";
+
+    if (error?.response?.status === 503) {
+      await loadHealth();
+    }
   } finally {
     loading.value = false;
   }

@@ -22,8 +22,34 @@ from backend.app.schemas.sentiment import (
 )
 
 
-POS_WORDS = {"棒", "好", "赞", "优秀", "喜欢", "爱", "强", "美", "绝", "推荐", "紧凑", "感人", "值得"}
-NEG_WORDS = {"差", "烂", "慢", "贵", "丑", "避雷", "无语", "尴尬", "拖沓", "失望", "垃圾", "不行"}
+POS_WORDS = {
+    "好",
+    "赞",
+    "优秀",
+    "喜欢",
+    "爱",
+    "棒",
+    "满意",
+    "推荐",
+    "惊喜",
+    "暖心",
+    "感人",
+    "值得",
+}
+NEG_WORDS = {
+    "差",
+    "烂",
+    "一般",
+    "失望",
+    "生气",
+    "避雷",
+    "无语",
+    "糟糕",
+    "拖沓",
+    "后悔",
+    "垃圾",
+    "不行",
+}
 
 
 def force_bypass_security_check() -> None:
@@ -37,7 +63,7 @@ transformers.modeling_utils.check_torch_load_is_safe = force_bypass_security_che
 
 
 class BertLoRALinear(nn.Module):
-    """LoRA + 线性分类头。"""
+    """LoRA 加线性分类头。"""
 
     def __init__(self, config_dict: dict, model_name: str) -> None:
         super().__init__()
@@ -106,7 +132,7 @@ class SentimentService:
 
     def analyze(self, text: str, threshold: float) -> SentimentAnalyzeResponse:
         if self.model is None or self.tokenizer is None or self.status != "ready":
-            raise RuntimeError(self.error_message or "模型未加载")
+            raise RuntimeError(self.error_message or "模型尚未加载")
 
         clean_text = text.strip()
         if not clean_text:
@@ -141,7 +167,7 @@ class SentimentService:
             label = "负面情感"
         else:
             sentiment = "neutral"
-            label = "中性/不确定"
+            label = "中性情感"
 
         try:
             import jieba

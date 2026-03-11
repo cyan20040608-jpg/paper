@@ -39,7 +39,10 @@
             <strong>{{ formatPercent(result.probabilities.positive) }}</strong>
           </div>
           <div class="probability-item__bar">
-            <span class="probability-item__fill is-positive" :style="{ width: `${result.probabilities.positive * 100}%` }"></span>
+            <span
+              class="probability-item__fill is-positive"
+              :style="{ width: `${result.probabilities.positive * 100}%` }"
+            ></span>
           </div>
         </div>
 
@@ -49,7 +52,10 @@
             <strong>{{ formatPercent(result.probabilities.negative) }}</strong>
           </div>
           <div class="probability-item__bar">
-            <span class="probability-item__fill is-negative" :style="{ width: `${result.probabilities.negative * 100}%` }"></span>
+            <span
+              class="probability-item__fill is-negative"
+              :style="{ width: `${result.probabilities.negative * 100}%` }"
+            ></span>
           </div>
         </div>
       </div>
@@ -74,7 +80,9 @@
       </div>
     </template>
 
-    <p v-else class="result-panel__empty">输入文本并点击“开始分析”后，这里会显示模型判断结果。</p>
+    <p v-else class="result-panel__empty">
+      输入文本并点击“开始分析”后，这里会显示模型判断结果。
+    </p>
   </section>
 </template>
 
