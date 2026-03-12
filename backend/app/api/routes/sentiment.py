@@ -17,9 +17,13 @@ def analyze_sentiment(payload: SentimentAnalyzeRequest) -> SentimentAnalyzeRespo
     service = get_sentiment_service()
 
     if service.status != "ready":
+        if service.status == "loading":
+            detail = "模型加载中，请稍后再试"
+        else:
+            detail = service.error_message or "模型尚未就绪"
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=service.error_message or "妯″瀷灏氭湭灏辩华",
+            detail=detail,
         )
 
     try:
@@ -36,5 +40,5 @@ def analyze_sentiment(payload: SentimentAnalyzeRequest) -> SentimentAnalyzeRespo
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="鎺ㄧ悊澶辫触",
+            detail="推理失败",
         ) from exc

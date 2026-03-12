@@ -1,9 +1,10 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AdminLayout from "../layouts/AdminLayout.vue";
-import HistoryView from "../views/HistoryView.vue";
-import SentimentView from "../views/SentimentView.vue";
-import TrendView from "../views/TrendView.vue";
-import WordStatsView from "../views/WordStatsView.vue";
+
+const SentimentView = () => import("../views/SentimentView.vue");
+const TrendView = () => import("../views/TrendView.vue");
+const WordStatsView = () => import("../views/WordStatsView.vue");
+const HistoryView = () => import("../views/HistoryView.vue");
 
 const routes = [
   {

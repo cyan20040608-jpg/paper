@@ -23,5 +23,6 @@ COPY bert-base-chinese /app/bert-base-chinese
 COPY model_group_a_no_cnn /app/model_group_a_no_cnn
 
 EXPOSE 8000
-
+#frpc -c ./frpc.toml
+#python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

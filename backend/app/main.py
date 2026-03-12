@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 
 from backend.app.api.routes.health import router as health_router
@@ -22,15 +24,25 @@ logger = logging.getLogger(__name__)
 
 FRONTEND_DIST_DIR = settings.project_root / "frontend" / "dist"
 FRONTEND_INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
+FRONTEND_ASSETS_DIR = FRONTEND_DIST_DIR / "assets"
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     service = get_sentiment_service()
-    try:
-        service.load()
-    except Exception:
-        logger.exception("模型预加载失败")
+
+    def _helper_preload_model() -> None:
+        try:
+            service.load()
+        except Exception:
+            logger.exception("模型后台加载失败")
+
+    loader_thread = threading.Thread(
+        target=_helper_preload_model,
+        name="sentiment-model-loader",
+        daemon=True,
+    )
+    loader_thread.start()
     yield
 
 
@@ -47,9 +59,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.include_router(health_router)
 app.include_router(sentiment_router)
+
+
+@app.get("/assets/{asset_path:path}", include_in_schema=False)
+def serve_frontend_asset(asset_path: str) -> FileResponse:
+    if not FRONTEND_ASSETS_DIR.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="前端静态资源不存在，请先在 frontend 目录执行 npm run build",
+        )
+
+    asset_file = (FRONTEND_ASSETS_DIR / asset_path).resolve()
+    assets_root = FRONTEND_ASSETS_DIR.resolve()
+
+    if assets_root not in asset_file.parents or not asset_file.is_file():
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    return FileResponse(
+        asset_file,
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+        },
+    )
 
 
 @app.get("/", include_in_schema=False)
@@ -71,6 +106,16 @@ def serve_frontend(full_path: str = "") -> FileResponse:
         raise HTTPException(status_code=404, detail="Not Found")
 
     if full_path and requested_path.is_file():
-        return FileResponse(requested_path)
+        return FileResponse(
+            requested_path,
+            headers={
+                "Cache-Control": "public, max-age=3600",
+            },
+        )
 
-    return FileResponse(FRONTEND_INDEX_FILE)
+    return FileResponse(
+        FRONTEND_INDEX_FILE,
+        headers={
+            "Cache-Control": "no-cache",
+        },
+    )

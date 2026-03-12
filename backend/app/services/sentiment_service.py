@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -100,12 +101,21 @@ class SentimentService:
         self.tokenizer: BertTokenizer | None = None
         self.status = "idle"
         self.error_message = ""
+        self._load_lock = threading.Lock()
+        self._is_loading = False
 
     def load(self) -> None:
-        if self.model is not None and self.tokenizer is not None:
-            return
+        with self._load_lock:
+            if self.model is not None and self.tokenizer is not None and self.status == "ready":
+                return
 
-        self.status = "loading"
+            if self._is_loading:
+                return
+
+            self._is_loading = True
+            self.status = "loading"
+            self.error_message = ""
+
         config_path = self.model_dir / "config.json"
         weights_path = self.model_dir / "best_model.bin"
 
@@ -114,27 +124,36 @@ class SentimentService:
                 config_dict = json.load(file)
 
             model_name = str(self.bert_dir if self.bert_dir.exists() else "bert-base-chinese")
-            self.tokenizer = BertTokenizer.from_pretrained(model_name)
-            self.model = BertLoRALinear(config_dict=config_dict, model_name=model_name)
+            tokenizer = BertTokenizer.from_pretrained(model_name)
+            model = BertLoRALinear(config_dict=config_dict, model_name=model_name)
 
             try:
                 state_dict = torch.load(weights_path, map_location=self.device, weights_only=False)
             except TypeError:
                 state_dict = torch.load(weights_path, map_location=self.device)
 
-            self.model.load_state_dict(state_dict)
-            self.model.to(self.device).eval()
-            self.status = "ready"
-            self.error_message = ""
+            model.load_state_dict(state_dict)
+            model.to(self.device).eval()
+
+            with self._load_lock:
+                self.tokenizer = tokenizer
+                self.model = model
+                self.status = "ready"
+                self.error_message = ""
+                self._is_loading = False
         except Exception as exc:
-            self.model = None
-            self.tokenizer = None
-            self.status = "error"
-            self.error_message = str(exc)
+            with self._load_lock:
+                self.model = None
+                self.tokenizer = None
+                self.status = "error"
+                self.error_message = str(exc)
+                self._is_loading = False
             raise
 
     def analyze(self, text: str, threshold: float) -> SentimentAnalyzeResponse:
         if self.model is None or self.tokenizer is None or self.status != "ready":
+            if self.status == "loading":
+                raise RuntimeError("模型加载中，请稍后再试")
             raise RuntimeError(self.error_message or "模型尚未加载")
 
         clean_text = text.strip()

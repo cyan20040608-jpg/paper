@@ -31,8 +31,8 @@
         </div>
 
         <div class="sentiment-form__actions">
-          <button class="primary-button" type="button" :disabled="loading" @click="handleAnalyze">
-            {{ loading ? "分析中..." : "开始分析" }}
+          <button class="primary-button" type="button" :disabled="isAnalyzeDisabled" @click="handleAnalyze">
+            {{ analyzeButtonText }}
           </button>
           <button class="secondary-button" type="button" :disabled="loading" @click="handleReset">
             重置
@@ -60,12 +60,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { analyzeSentiment, fetchHealth } from "../api/sentiment";
 import SentimentResultPanel from "../components/SentimentResultPanel.vue";
 import { appendHistoryRecord } from "../utils/history";
 
 const defaultText = "这家店味道真的绝了，服务也很周到，下次还来。";
+const healthPollIntervalMs = 3000;
 
 const form = reactive({
   text: defaultText,
@@ -77,13 +78,16 @@ const result = ref(null);
 const errorMessage = ref("");
 const healthStatus = ref("idle");
 const healthDetail = ref("");
+const healthRequesting = ref(false);
+
+let healthTimer = null;
 
 const healthTag = computed(() => {
   if (healthStatus.value === "ready") {
     return "ready";
   }
 
-  if (healthStatus.value === "error") {
+  if (healthStatus.value === "error" || healthStatus.value === "unreachable") {
     return "error";
   }
 
@@ -110,20 +114,56 @@ const healthText = computed(() => {
   return "正在检测";
 });
 
+const isAnalyzeDisabled = computed(() => {
+  return loading.value || healthStatus.value !== "ready";
+});
+
+const analyzeButtonText = computed(() => {
+  if (loading.value) {
+    return "分析中...";
+  }
+
+  if (healthStatus.value === "loading") {
+    return "模型加载中";
+  }
+
+  return "开始分析";
+});
+
 async function loadHealth() {
+  if (healthRequesting.value) {
+    return;
+  }
+
+  healthRequesting.value = true;
+
   try {
     const response = await fetchHealth();
     const backendStatus = response.data.status || "idle";
 
     healthStatus.value = backendStatus;
     healthDetail.value = response.data.detail || "";
+
+    if (backendStatus === "ready") {
+      errorMessage.value = "";
+    }
   } catch (error) {
     healthStatus.value = "unreachable";
     healthDetail.value = error?.message || "";
+  } finally {
+    healthRequesting.value = false;
   }
 }
 
 async function handleAnalyze() {
+  if (isAnalyzeDisabled.value) {
+    if (healthStatus.value === "loading") {
+      errorMessage.value = "模型加载中，请稍后再试。";
+      await loadHealth();
+    }
+    return;
+  }
+
   loading.value = true;
   errorMessage.value = "";
 
@@ -147,11 +187,13 @@ async function handleAnalyze() {
     });
   } catch (error) {
     result.value = null;
-    errorMessage.value =
-      error?.response?.data?.detail || "分析请求失败，请检查后端服务是否已经启动。";
 
     if (error?.response?.status === 503) {
+      errorMessage.value = error?.response?.data?.detail || "模型加载中，请稍后再试。";
       await loadHealth();
+    } else {
+      errorMessage.value =
+        error?.response?.data?.detail || "分析请求失败，请检查后端服务是否已经启动。";
     }
   } finally {
     loading.value = false;
@@ -165,7 +207,31 @@ function handleReset() {
   errorMessage.value = "";
 }
 
-onMounted(() => {
-  loadHealth();
+function startHealthPolling() {
+  if (healthTimer !== null) {
+    return;
+  }
+
+  healthTimer = window.setInterval(() => {
+    if (healthStatus.value !== "ready") {
+      void loadHealth();
+    }
+  }, healthPollIntervalMs);
+}
+
+function stopHealthPolling() {
+  if (healthTimer !== null) {
+    window.clearInterval(healthTimer);
+    healthTimer = null;
+  }
+}
+
+onMounted(async () => {
+  await loadHealth();
+  startHealthPolling();
+});
+
+onBeforeUnmount(() => {
+  stopHealthPolling();
 });
 </script>
